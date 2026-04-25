@@ -2,7 +2,7 @@
 
 from utils.logger import configure_logging, get_logger
 
-LOGGER = get_logger(__name__)
+LOGGER = get_logger("main.py")
 
 
 def greeting() -> str:
