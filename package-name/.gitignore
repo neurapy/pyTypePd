@@ -1,0 +1,38 @@
+# Python-generated files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution files
+build/
+dist/
+wheels/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+
+# Tool caches and reports
+.coverage
+.coverage.*
+.mypy_cache/
+.pytest_cache/
+.pyright/
+.ruff_cache/
+coverage.xml
+htmlcov/
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/
+
+# Local Codex state
+.codex
+.codex/
