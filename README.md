@@ -46,7 +46,6 @@ Shared targets:
 
 ```bash
 make install    # Install dependencies and pre-commit hooks
-make sync       # Install project and developer dependencies
 make format     # Format Python files with Ruff and pyproject.toml with Taplo
 make lint       # Lint Python files with Ruff
 make typecheck  # Run Pyright in strict mode
@@ -74,8 +73,9 @@ Make targets for repeatable commands:
 Activation is optional for interactive shell work:
 
 ```bash
-make sync
-source .venv/bin/activate
+# To activate
+source .venv/bin/activate 
+# To deactivate
 deactivate
 ```
 

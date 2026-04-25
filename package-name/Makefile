@@ -3,13 +3,12 @@
 UV ?= uv
 TAPLO ?= RUST_LOG=error $(UV) run taplo
 
-.PHONY: help install sync format lint typecheck test check build clean
+.PHONY: help install format lint typecheck test check build clean
 
 help:
 	@printf '%s\n' \
 		'Available targets:' \
 		'  install    Install dependencies and git hooks' \
-		'  sync       Install project and developer dependencies' \
 		'  format     Format Python and TOML files' \
 		'  lint       Lint Python files with Ruff' \
 		'  typecheck  Run Pyright in strict mode' \
@@ -18,11 +17,10 @@ help:
 		'  build      Build the package' \
 		'  clean      Remove local build and tool artifacts'
 
-install: sync
+install:
+	$(UV) sync --all-groups
 	$(UV) run pre-commit install
 
-sync:
-	$(UV) sync --all-groups
 
 format:
 	$(UV) run ruff format .
