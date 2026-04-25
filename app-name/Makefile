@@ -3,13 +3,12 @@
 UV ?= uv
 TAPLO ?= RUST_LOG=error $(UV) run taplo
 
-.PHONY: help install sync run format lint typecheck test check clean
+.PHONY: help install run format lint typecheck test check clean
 
 help:
 	@printf '%s\n' \
 		'Available targets:' \
 		'  install    Install dependencies and git hooks' \
-		'  sync       Install project and developer dependencies' \
 		'  run        Run the app' \
 		'  format     Format Python and TOML files' \
 		'  lint       Lint Python files with Ruff' \
@@ -18,18 +17,17 @@ help:
 		'  check      Run all verification commands' \
 		'  clean      Remove local build and tool artifacts'
 
-install: sync
+install: 
+	$(UV) sync --all-groups
 	$(UV) run pre-commit install
 
-sync:
-	$(UV) sync --all-groups
 
 run:
 	$(UV) run src/main.py
 
 format:
 	$(UV) run ruff format .
-	$(TAPLO) fmt pyproject.toml
+	$(UV) run taplo fmt pyproject.toml
 
 lint:
 	$(UV) run ruff check .
@@ -42,7 +40,7 @@ test:
 
 check:
 	$(UV) run ruff format --check .
-	$(TAPLO) fmt --check pyproject.toml
+	$(UV) run taplo fmt --check pyproject.toml
 	$(UV) run ruff check .
 	$(UV) run pyright
 	$(UV) run pytest
