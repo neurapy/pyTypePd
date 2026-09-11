@@ -3,6 +3,9 @@
 - Keep code short, clean, and easy to read. Prefer small functions and
   straightforward solutions over unnecessary abstractions.
 - Follow the existing structure and conventions. Keep changes focused on the task.
+- Consider changes to be breaking changes. The goal is to get to a maximally
+  clean code state. When depreciating/changing a feature, there is no need for
+  legacy support unless explicitly requested.
 - Use accurate type annotations and keep strict typing checks enabled.
 - Before adding `# type: ignore`, `# pyright: ignore`, or disabling typing rules,
   check whether a maintained type-stub package or suitable `.pyi` stubs would

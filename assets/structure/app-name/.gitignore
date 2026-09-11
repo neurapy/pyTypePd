@@ -36,3 +36,6 @@ htmlcov/
 # Local Codex state
 .codex
 .codex/
+
+# Exclude exact version control
+uv.lock

@@ -4,23 +4,12 @@ A typed Python application, managed with [uv](https://docs.astral.sh/uv/).
 
 ## Get started
 
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and `make`, then:
+Make sure `uv` and `make` are installed. Then:
 
 ```sh
-git init
 make install
 make check
-# make necessary initial changes
-git add . && git commit -m "Initial Commit"
 ```
-
-`uv` downloads Python `__python_version__` if needed and creates `.venv` with the
-project and developer tools. `.python-version` selects Python __python_version__,
-and `pyproject.toml` allows any __python_version__.x patch release. Ruff and Pyright
-target Python __python_minor__.
-
-`make install` enables pre-commit hooks when Git is initialized. Include the
-generated `uv.lock` in the initial commit to keep dependency versions reproducible.
 
 ## Develop
 
