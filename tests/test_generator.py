@@ -230,9 +230,20 @@ class GeneratorTests(unittest.TestCase):
         result = self.launch("-h")
         self.assert_success(result)
         self.assertIn("--update", result.stdout)
+        self.assertIn("--uninstall", result.stdout)
         self.assertNotIn("--install", result.stdout)
         self.assertFalse(self.project.exists())
         self.assertEqual(self.launch("--install").returncode, 2)
+
+    def test_maintenance_options_cannot_be_combined_with_generation(self) -> None:
+        for option in ("--update", "--uninstall"):
+            for arguments in ((str(self.project),), ("--yes",), ("--python", "3.14")):
+                with self.subTest(option=option, arguments=arguments):
+                    result = self.launch(option, *arguments)
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn(f"Use {option} on its own", result.stderr)
+                    self.assertFalse(self.project.exists())
+        self.assertEqual(self.launch("--update", "--uninstall").returncode, 2)
 
     def test_launcher_handles_spaces_and_relative_symlink_chains(self) -> None:
         checkout = self.base / "generator checkout"

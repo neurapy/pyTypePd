@@ -19,7 +19,6 @@ Environment overrides:
   XDG_DATA_HOME          Parent of the default pytyped checkout
   PYTYPED_REPO_URL       Git URL (default: https://github.com/neurapy/pyTypePd.git)
   PYTYPED_BIN_DIR        Directory for the pytyped command (default: ~/.local/bin)
-  PYTYPED_SHELL_CONFIG   POSIX shell startup file to configure instead of auto-detection
 USAGE
 }
 
@@ -30,17 +29,6 @@ pytyped_absolute_path() {
         /*) printf '%s\n' "$1" ;;
         *) printf '%s/%s\n' "$PWD" "$1" ;;
     esac
-}
-
-pytyped_add_path() {
-    if [ -e "$1" ] && [ ! -f "$1" ]; then
-        pytyped_fail "Shell configuration is not a file: $1"
-    fi
-    if [ ! -f "$1" ] || ! grep -Fqx "$pytyped_path_line" "$1"; then
-        mkdir -p "$(dirname "$1")"
-        printf '\n# pytyped\n%s\n' "$pytyped_path_line" >> "$1"
-        printf '  Added PATH to %s\n' "$1"
-    fi
 }
 
 pytyped_install() {
@@ -113,6 +101,7 @@ pytyped_install() {
     fi
 
     pytyped_repository=${PYTYPED_REPO_URL:-https://github.com/neurapy/pyTypePd.git}
+    pytyped_cloned=false
     if [ -e "$pytyped_destination/.git" ]; then
         pytyped_origin=$(git -C "$pytyped_destination" remote get-url origin)
         [ "$pytyped_origin" = "$pytyped_repository" ] || pytyped_fail "A checkout of another repository exists at $pytyped_destination."
@@ -120,9 +109,18 @@ pytyped_install() {
     else
         printf '\n  Cloning into %s...\n' "$pytyped_destination"
         git clone -- "$pytyped_repository" "$pytyped_destination"
+        pytyped_cloned=true
     fi
     [ -x "$pytyped_launcher" ] && [ -f "$pytyped_destination/assets/generate.py" ] ||
         pytyped_fail "The checkout at $pytyped_destination does not contain the pytyped launcher and assets."
+
+    # Record ownership inside the checkout so uninstall can preserve manual clones.
+    if [ "$pytyped_cloned" = true ]; then
+        git -C "$pytyped_destination" config --local pytyped.installRoot "$pytyped_destination"
+    fi
+    if ! git -C "$pytyped_destination" config --local --get-all pytyped.command | grep -Fqx -- "$pytyped_command"; then
+        git -C "$pytyped_destination" config --local --add pytyped.command "$pytyped_command"
+    fi
 
     if [ "$pytyped_replace_link" = true ]; then
         rm "$pytyped_command"
@@ -131,35 +129,17 @@ pytyped_install() {
         ln -s "$pytyped_launcher" "$pytyped_command"
     fi
 
-    # Escape literal path characters for a double-quoted shell assignment; never eval input.
-    pytyped_escaped_bin=$(printf '%s' "$pytyped_bin" | sed 's/[\\$`"]/\\&/g')
-    pytyped_path_line="export PATH=\"$pytyped_escaped_bin:\$PATH\""
-    if [ -n "${PYTYPED_SHELL_CONFIG:-}" ]; then
-        pytyped_add_path "$(pytyped_absolute_path "$PYTYPED_SHELL_CONFIG")"
-    else
-        case ${SHELL:-/bin/sh} in
-            */zsh)
-                pytyped_add_path "${ZDOTDIR:-$HOME}/.zshrc"
-                ;;
-            */bash)
-                pytyped_add_path "$HOME/.bashrc"
-                # Bash login shells read the first existing file from this list.
-                pytyped_login_file=$HOME/.profile
-                for pytyped_candidate in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
-                    if [ -f "$pytyped_candidate" ]; then
-                        pytyped_login_file=$pytyped_candidate
-                        break
-                    fi
-                done
-                pytyped_add_path "$pytyped_login_file"
-                ;;
-            *) pytyped_add_path "$HOME/.profile" ;;
-        esac
-    fi
-
     printf '\n  Installed %s\n' "$pytyped_command"
-    printf '\n  Open a new terminal, or run this in your current shell:\n\n    %s\n' "$pytyped_path_line"
-    printf '\n  Get started: pytyped .\n  Help:        pytyped -h\n  Update:      pytyped --update\n\n'
+    case :${PATH:-}: in
+        *:"$pytyped_bin":*) ;;
+        *)
+            # Print a safely quoted suggestion; never change shell startup files.
+            pytyped_escaped_bin=$(printf '%s' "$pytyped_bin" | sed 's/[\\$`"]/\\&/g')
+            printf '\n  %s is not on PATH. To use pytyped in this shell, run:\n\n' "$pytyped_bin"
+            printf '    %s\n' "export PATH=\"$pytyped_escaped_bin:\$PATH\""
+            ;;
+    esac
+    printf '\n  Get started: pytyped .\n  Help:        pytyped -h\n  Update:      pytyped --update\n  Uninstall:   pytyped --uninstall\n\n'
 }
 
 pytyped_install "$@"

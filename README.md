@@ -20,10 +20,9 @@ curl -fsSL https://raw.githubusercontent.com/neurapy/pyTypePd/main/install.sh | 
 
 The installer asks where to clone the Git repository. Press Enter for
 `~/.local/share/pytyped` (or `$XDG_DATA_HOME/pytyped` when set). It creates
-`~/.local/bin/pytyped` and adds that directory to your shell configuration:
-`.zshrc` for zsh, or `.bashrc` and the login profile for bash. Existing settings
-are preserved. Open a new terminal afterward, or paste the printed PATH command
-into your current shell.
+`~/.local/bin/pytyped`. If `~/.local/bin` is already on your PATH, the command is
+ready to use. Otherwise, the installer prints a PATH command you can run yourself.
+It does not edit shell startup files.
 
 The question reads from the terminal, so it also works when the script is piped
 into `sh`. For unattended installation, supply a directory or accept the default:
@@ -35,12 +34,12 @@ curl -fsSL https://raw.githubusercontent.com/neurapy/pyTypePd/main/install.sh | 
 
 You can also run `sh install.sh` from a downloaded checkout. Installation needs
 Git and either Python 3.9+ or [uv](https://docs.astral.sh/uv/getting-started/installation/).
-Run `sh install.sh -h` for installer options, including overrides for the Git URL,
-command directory, and shell configuration file.
+Run `sh install.sh -h` for installer options, including overrides for the Git URL
+and command directory.
 
 Re-running the installer reuses an existing checkout of the same repository and
-avoids duplicate configuration entries. It can migrate a symlink created by the
-previous installer; unrelated commands and existing project files are preserved.
+command link. It can migrate a symlink created by the previous installer;
+unrelated commands and existing project files are preserved.
 
 ## Create a project
 
@@ -96,11 +95,12 @@ and installs the project and developer tools. To enable Git hooks, run `git init
 before `make install`. Commit `uv.lock` after the first install.
 Use a current uv release so it knows about the latest Python downloads.
 
-## Help and updates
+## Help, updates, and uninstalling
 
 ```sh
 pytyped -h
 pytyped --update
+pytyped --uninstall
 ```
 
 `-h` (or `--help`) lists generator options. `--update` pulls the tracked branch
@@ -108,6 +108,16 @@ of pytyped's own Git checkout, regardless of your current directory. It requires
 a clean checkout and uses a fast-forward pull, preserving local changes and
 commits if an update cannot proceed. Generated projects are independent of the
 generator checkout and keep their existing files.
+
+`--uninstall` removes command links pointing to this copy of pytyped and deletes
+the checkout if it was created by the installer and has no local files, changes,
+commits, stashes, or linked worktrees. Manually cloned and older unmarked
+checkouts are kept, with their location printed. Shell configuration and
+generated projects are left untouched. The command finishes by printing:
+
+```sh
+wget -qO- https://raw.githubusercontent.com/neurapy/pyTypePd/main/install.sh | sh
+```
 
 Installation is handled by `install.sh`; there is no `pytyped --install` option.
 
@@ -174,4 +184,5 @@ To check the generated project as well, create a disposable project and run its
 `make install`, `make check`, `make run`, and `make build` targets.
 The GitHub Actions workflow runs the tests and this workflow on Linux and macOS.
 Installation tests use temporary directories and local Git remotes, including
-piped installation with a controlling terminal and fast-forward updates.
+piped installation with a controlling terminal, fast-forward updates, and
+uninstalling without deleting local work.

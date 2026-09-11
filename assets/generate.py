@@ -9,6 +9,7 @@ import keyword
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import urllib.error
@@ -324,6 +325,25 @@ def write_project(destination: Path, files: dict[Path, str]) -> None:
         raise
 
 
+def checkout_git(*arguments: str, missing_ok: bool = False) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(ROOT), *arguments],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise SetupError("Git is required to manage the pytyped checkout.") from exc
+    if missing_ok and result.returncode == 1:
+        return ""
+    if result.returncode:
+        raise SetupError(
+            result.stderr.strip() or "Could not read the pytyped Git checkout."
+        )
+    return result.stdout.strip()
+
+
 def update_checkout(terminal: Terminal) -> None:
     """Update this checkout, independently of the caller's working directory."""
     if not (ROOT / ".git").exists():
@@ -331,33 +351,19 @@ def update_checkout(terminal: Terminal) -> None:
             "This copy is not a Git checkout. Install pytyped with install.sh."
         )
 
-    def git(*arguments: str) -> str:
-        try:
-            result = subprocess.run(
-                ["git", "-C", str(ROOT), *arguments],
-                text=True,
-                capture_output=True,
-                check=False,
-            )
-        except FileNotFoundError as exc:
-            raise SetupError("Git is required to update pytyped.") from exc
-        if result.returncode:
-            raise SetupError(
-                result.stderr.strip() or "Could not read the pytyped Git checkout."
-            )
-        return result.stdout.strip()
-
-    if git("status", "--porcelain", "--untracked-files=all"):
+    if checkout_git("status", "--porcelain", "--untracked-files=all"):
         raise SetupError(
             f"The pytyped checkout has uncommitted changes: {ROOT}. "
             "Commit or stash them before running --update."
         )
-    if not git("branch", "--show-current"):
+    if not checkout_git("branch", "--show-current"):
         raise SetupError(
             "The pytyped checkout has a detached HEAD. Check out a branch before updating."
         )
-    upstream = git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
-    before = git("rev-parse", "HEAD")
+    upstream = checkout_git(
+        "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"
+    )
+    before = checkout_git("rev-parse", "HEAD")
     terminal.note(f"Updating pytyped in {ROOT} from {upstream}...")
     result = subprocess.run(
         ["git", "-C", str(ROOT), "pull", "--ff-only", "--no-rebase", "--no-autostash"],
@@ -369,10 +375,70 @@ def update_checkout(terminal: Terminal) -> None:
         )
     message = (
         "Already up to date."
-        if git("rev-parse", "HEAD") == before
+        if checkout_git("rev-parse", "HEAD") == before
         else "pytyped updated."
     )
     print(terminal.style(f"\n  {message}\n", "32"))
+
+
+def uninstall_checkout(terminal: Terminal) -> None:
+    """Remove our command links and an unchanged, installer-owned checkout."""
+    directories = [
+        str(Path.home() / ".local" / "bin"),
+        os.environ.get("PYTYPED_BIN_DIR", ""),
+        *os.environ.get("PATH", "").split(os.pathsep),
+    ]
+    commands = {Path(directory) / "pytyped" for directory in directories if directory}
+    keep_reason = "it is not an installer-owned checkout"
+    try:
+        if (ROOT / ".git").exists():
+            recorded = checkout_git(
+                "config", "--local", "--get-all", "pytyped.command", missing_ok=True
+            )
+            commands.update(Path(path) for path in recorded.splitlines() if path)
+            installed_root = checkout_git(
+                "config", "--local", "--get", "pytyped.installRoot", missing_ok=True
+            )
+            if installed_root == str(ROOT) and (ROOT / ".git").is_dir():
+                worktrees = checkout_git("worktree", "list", "--porcelain")
+                if (
+                    sum(line.startswith("worktree ") for line in worktrees.splitlines())
+                    > 1
+                ):
+                    keep_reason = "it has linked Git worktrees"
+                elif checkout_git(
+                    "status", "--porcelain", "--untracked-files=all", "--ignored"
+                ):
+                    keep_reason = "it contains local files or changes"
+                elif checkout_git(
+                    "rev-list", "--max-count=1", "HEAD", "--all", "--not", "--remotes"
+                ):
+                    keep_reason = "it contains local commits or stashes"
+                else:
+                    keep_reason = ""
+    except SetupError as exc:
+        keep_reason = f"could not verify it is safe to remove: {exc}"
+
+    for command in sorted(commands):
+        # A command may have been replaced or redirected since installation.
+        try:
+            matches = command.is_symlink() and command.resolve() == ROOT / "pytyped.sh"
+        except (OSError, RuntimeError):
+            matches = False
+        if matches:
+            command.unlink()
+            terminal.note(f"Removed command: {command}")
+
+    if keep_reason:
+        terminal.note(f"Kept checkout: {ROOT} ({keep_reason}).")
+    else:
+        shutil.rmtree(ROOT)
+        terminal.note(f"Removed checkout: {ROOT}")
+    print(terminal.style("\n  pytyped uninstalled.", "32"))
+    print("\n  Reinstall with:\n")
+    print(
+        "    wget -qO- https://raw.githubusercontent.com/neurapy/pyTypePd/main/install.sh | sh\n"
+    )
 
 
 def argument_parser() -> argparse.ArgumentParser:
@@ -407,10 +473,16 @@ def argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="skip release lookup; default to the running Python version",
     )
-    parser.add_argument(
+    maintenance = parser.add_mutually_exclusive_group()
+    maintenance.add_argument(
         "--update",
         action="store_true",
         help="update the pytyped Git checkout with a fast-forward pull",
+    )
+    maintenance.add_argument(
+        "--uninstall",
+        action="store_true",
+        help="remove the pytyped command and its unchanged installer-owned checkout",
     )
     return parser
 
@@ -420,7 +492,8 @@ def main(argv: list[str] | None = None) -> int:
     options = parser.parse_args(argv)
     terminal = Terminal()
     try:
-        if options.update:
+        if options.update or options.uninstall:
+            action = "--update" if options.update else "--uninstall"
             if options.destination != "." or any(
                 (
                     options.name is not None,
@@ -430,8 +503,11 @@ def main(argv: list[str] | None = None) -> int:
                     options.offline,
                 )
             ):
-                raise SetupError("Use --update on its own.")
-            update_checkout(terminal)
+                raise SetupError(f"Use {action} on its own.")
+            if options.update:
+                update_checkout(terminal)
+            else:
+                uninstall_checkout(terminal)
             return 0
 
         destination = Path(options.destination).expanduser().resolve()
@@ -496,11 +572,12 @@ def main(argv: list[str] | None = None) -> int:
         print("    make install\n    make check\n    make run\n")
         return 0
     except (EOFError, KeyboardInterrupt):
-        message = (
-            "Update cancelled."
-            if options.update
-            else "Cancelled. No project was created."
-        )
+        if options.update:
+            message = "Update cancelled."
+        elif options.uninstall:
+            message = "Uninstall interrupted. Some files may already have been removed."
+        else:
+            message = "Cancelled. No project was created."
         print(f"\n  {message}", file=sys.stderr)
         return 130
     except (SetupError, ValueError, OSError) as exc:
