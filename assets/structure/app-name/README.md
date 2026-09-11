@@ -23,10 +23,6 @@ make check      # Check formatting, lint, types, and tests
 make build      # Build a wheel and source distribution in dist/
 ```
 
-Add dependencies with `uv add <package>` or `uv add --dev <package>`.
-Run the installed app with `uv run __project_name__` or
-`uv run python -m __package_name__`.
-
 ## Structure
 
 ```text
