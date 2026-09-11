@@ -11,6 +11,7 @@ import signal
 import subprocess
 import tempfile
 import time
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -41,7 +42,12 @@ class InstallationTests(unittest.TestCase):
             "ZDOTDIR": str(self.config.parent),
         }
         self.seed.mkdir()
-        for filename in ("pytyped.sh", "install.sh", ".gitignore"):
+        for filename in (
+            "pytyped.sh",
+            "install.sh",
+            ".gitignore",
+            "pytyped.example.conf",
+        ):
             shutil.copy2(ROOT / filename, self.seed / filename)
         shutil.copytree(
             ROOT / "assets",
@@ -100,7 +106,15 @@ class InstallationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         checkout = checkout or self.checkout
         self.assertTrue((checkout / ".git").is_dir())
+        self.assertTrue((checkout / "pytyped.conf").is_file())
         self.assertEqual((self.bin / "pytyped").resolve(), checkout / "pytyped.sh")
+
+    def identity(self, checkout: Path | None = None) -> tuple[str, str]:
+        config = (checkout or self.checkout) / "pytyped.conf"
+        return (
+            self.git(self.base, "config", "--file", str(config), "--get", "user.name"),
+            self.git(self.base, "config", "--file", str(config), "--get", "user.email"),
+        )
 
     def install_legacy(self) -> None:
         # Reproduce the older installer's clone and symlink without ownership metadata.
@@ -134,18 +148,35 @@ class InstallationTests(unittest.TestCase):
         self.git(self.seed, "push", "origin", "main")
         return self.git(self.seed, "rev-parse", "HEAD")
 
-    def interactive_install(self, answer: str) -> subprocess.CompletedProcess[str]:
+    def interactive_install(
+        self,
+        answer: str,
+        name: str | None = "",
+        email: str | None = "",
+        arguments: tuple[str, ...] = (),
+    ) -> subprocess.CompletedProcess[str]:
         # A controlling terminal is distinct from stdin, which carries the shell script.
         pid, descriptor = pty.fork()
         if pid == 0:
             os.chdir(self.base)
             os.execve(
                 "/bin/sh",
-                ["sh", "-c", 'cat "$1" | sh', "installer-test", str(INSTALLER)],
+                [
+                    "sh",
+                    "-c",
+                    'pytyped_test_script=$1; shift; cat "$pytyped_test_script" | sh -s -- "$@"',
+                    "installer-test",
+                    str(INSTALLER),
+                    *arguments,
+                ],
                 self.env,
             )
         output = bytearray()
-        answered = False
+        pending = {
+            b"Install directory [": answer,
+            b"Full name [": name,
+            b"Email [": email,
+        }
         deadline = time.monotonic() + 15
         try:
             while time.monotonic() < deadline:
@@ -160,9 +191,13 @@ class InstallationTests(unittest.TestCase):
                 if not chunk:
                     break
                 output.extend(chunk)
-                if b"Install directory [" in output and not answered:
-                    os.write(descriptor, (answer + "\n").encode())
-                    answered = True
+                for prompt, response in list(pending.items()):
+                    if prompt in output:
+                        os.write(
+                            descriptor,
+                            b"\x04" if response is None else (response + "\n").encode(),
+                        )
+                        del pending[prompt]
             else:
                 self.fail(
                     "Installer did not finish: " + output.decode(errors="replace")
@@ -188,10 +223,133 @@ class InstallationTests(unittest.TestCase):
         result = self.interactive_install(str(target))
         self.assert_installed(result, target)
 
-    def test_no_terminal_requires_a_directory_or_yes(self) -> None:
-        result = self.install()
+    def test_installation_uses_git_identity_as_prompt_defaults(self) -> None:
+        self.git(self.base, "init", "-q")
+        self.git(self.base, "config", "user.name", "Git Author")
+        self.git(self.base, "config", "user.email", "git@example.org")
+        result = self.interactive_install("")
+        self.assert_installed(result)
+        self.assertIn("Full name [Git Author]", result.stdout)
+        self.assertIn("Email [git@example.org]", result.stdout)
+        self.assertLess(
+            result.stdout.index("Full name ["), result.stdout.index("Email [")
+        )
+        self.assertEqual(self.identity(), ("Git Author", "git@example.org"))
+        self.assertEqual(self.git(self.checkout, "status", "--porcelain"), "")
+
+    def test_saved_identity_is_used_for_projects_and_survives_updates_and_reinstall(
+        self,
+    ) -> None:
+        self.git(self.base, "init", "-q")
+        self.git(self.base, "config", "user.name", "Git Author")
+        self.git(self.base, "config", "user.email", "git@example.org")
+        name = 'Zoë "Quoted" \\ Author $HOME `touch EXECUTED`'
+        email = "zoe+projects@example.org"
+        self.assert_installed(self.interactive_install("", name, email))
+        self.assertEqual(self.identity(), (name, email))
+        self.assertEqual(self.git(self.base, "config", "user.name"), "Git Author")
+        self.assertEqual(self.git(self.base, "config", "user.email"), "git@example.org")
+        self.assertFalse((self.base / "EXECUTED").exists())
+
+        project = self.base / "configured-project"
+        result = subprocess.run(
+            [str(self.bin / "pytyped"), str(project), "--yes", "--python", "3.10"],
+            cwd=self.base,
+            env=self.env,
+            text=True,
+            capture_output=True,
+            timeout=15,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        metadata = tomllib.loads((project / "pyproject.toml").read_text())
+        self.assertEqual(
+            metadata["project"]["authors"], [{"name": name, "email": email}]
+        )
+        self.assertIn(name, (project / "LICENSE").read_text())
+        self.assertFalse((project / "pytyped.conf").exists())
+
+        self.publish_update()
+        result = self.update()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.identity(), (name, email))
+        self.assert_installed(self.install("--yes"))
+        self.assertEqual(self.identity(), (name, email))
+        result = self.interactive_install("")
+        self.assert_installed(result)
+        self.assertIn(f"Full name [{name}]", result.stdout)
+        self.assertIn(f"Email [{email}]", result.stdout)
+        self.assertEqual(self.identity(), (name, email))
+
+    def test_explicit_directory_still_prompts_for_identity(self) -> None:
+        target = self.base / "custom checkout"
+        result = self.interactive_install(
+            "", "Custom Author", "custom@example.org", arguments=(str(target),)
+        )
+        self.assert_installed(result, target)
+        self.assertNotIn("Install directory [", result.stdout)
+        self.assertIn("Full name [", result.stdout)
+        self.assertEqual(self.identity(target), ("Custom Author", "custom@example.org"))
+
+    def test_cancelling_identity_prompt_does_not_install(self) -> None:
+        result = self.interactive_install("", name=None)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("Installation cancelled", result.stdout)
+        self.assertFalse(self.checkout.exists())
+        self.assertFalse((self.bin / "pytyped").is_symlink())
+
+    def test_unattended_install_uses_git_defaults_or_empty_values(self) -> None:
+        self.assert_installed(self.install("--yes"))
+        self.assertEqual(self.identity(), ("", ""))
+        self.git(self.base, "init", "-q")
+        self.git(self.base, "config", "user.name", "Unattended Author")
+        self.git(self.base, "config", "user.email", "auto@example.org")
+        target = self.base / "unattended checkout"
+        self.assert_installed(self.install("--yes", str(target)), target)
+        self.assertEqual(
+            self.identity(target), ("Unattended Author", "auto@example.org")
+        )
+
+    def test_invalid_configuration_fails_without_overwriting_it(self) -> None:
+        self.assert_installed(self.install("--yes"))
+        config = self.checkout / "pytyped.conf"
+        config.write_text("[broken configuration\n")
+        result = self.install("--yes")
         self.assertEqual(result.returncode, 1)
-        self.assertIn("No terminal available", result.stderr)
+        self.assertIn("Invalid configuration", result.stderr)
+        self.assertEqual(config.read_text(), "[broken configuration\n")
+
+    def test_uninstall_preserves_directories_or_symlinks_named_like_config(
+        self,
+    ) -> None:
+        self.assert_installed(self.install("--yes"))
+        config = self.checkout / "pytyped.conf"
+        config.unlink()
+        config.mkdir()
+        (config / "local-work").write_text("Keep this\n")
+        result = self.maintenance("--uninstall")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("local files or changes", result.stdout)
+        self.assertEqual((config / "local-work").read_text(), "Keep this\n")
+        (config / "local-work").unlink()
+        config.rmdir()
+
+        other = self.base / "personal.conf"
+        other.write_text('[user]\nname = "Keep this"\n')
+        config.symlink_to(other)
+        result = self.install("--yes")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("symbolic link", result.stderr)
+        result = self.maintenance("--uninstall", launcher=self.checkout / "pytyped.sh")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(config.is_symlink())
+        self.assertEqual(other.read_text(), '[user]\nname = "Keep this"\n')
+
+    def test_no_terminal_requires_yes(self) -> None:
+        for arguments in ((), (str(self.checkout),)):
+            result = self.install(*arguments)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("No terminal available", result.stderr)
         self.assertFalse(self.checkout.exists())
 
     def test_install_is_repeatable_and_preserves_shell_configuration(self) -> None:
@@ -381,7 +539,7 @@ class InstallationTests(unittest.TestCase):
 
     def test_uninstall_from_inside_a_custom_checkout(self) -> None:
         checkout = self.base / "custom checkout"
-        self.assert_installed(self.install(str(checkout)), checkout)
+        self.assert_installed(self.install("--yes", str(checkout)), checkout)
         result = self.maintenance("--uninstall", cwd=checkout / "assets")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertFalse(checkout.exists())
@@ -390,7 +548,7 @@ class InstallationTests(unittest.TestCase):
     def test_uninstall_preserves_reused_and_unmarked_custom_checkouts(self) -> None:
         for checkout in (self.seed, self.base / "custom checkout"):
             with self.subTest(checkout=checkout):
-                self.assert_installed(self.install(str(checkout)), checkout)
+                self.assert_installed(self.install("--yes", str(checkout)), checkout)
                 if checkout != self.seed:
                     # Older installers did not record ownership or command paths.
                     self.git(

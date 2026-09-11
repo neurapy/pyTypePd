@@ -226,6 +226,21 @@ def git_identity(destination: Path) -> tuple[str, str]:
     return values[0], values[1]
 
 
+def project_identity(destination: Path) -> tuple[str, str]:
+    config = ROOT / "pytyped.conf"
+    if not config.exists():
+        return git_identity(destination)
+    if not config.is_file():
+        raise SetupError(f"Configuration is not a file: {config}")
+    name = checkout_git(
+        "config", "--file", str(config), "--get", "user.name", missing_ok=True
+    )
+    email = checkout_git(
+        "config", "--file", str(config), "--get", "user.email", missing_ok=True
+    )
+    return name, email
+
+
 def render_project(
     name: str, license_name: str, version: str, author: str, email: str
 ) -> dict[Path, str]:
@@ -422,6 +437,11 @@ def uninstall_checkout(terminal: Terminal) -> None:
             )
             commands.update(Path(path) for path in recorded.splitlines() if path)
             if (ROOT / ".git").is_dir() and is_installed_checkout():
+                paths = ["."]
+                config = ROOT / "pytyped.conf"
+                # The personal settings are part of the installation being removed.
+                if config.is_file() and not config.is_symlink():
+                    paths.append(":(exclude)pytyped.conf")
                 worktrees = checkout_git("worktree", "list", "--porcelain")
                 if (
                     sum(line.startswith("worktree ") for line in worktrees.splitlines())
@@ -429,7 +449,12 @@ def uninstall_checkout(terminal: Terminal) -> None:
                 ):
                     keep_reason = "it has linked Git worktrees"
                 elif checkout_git(
-                    "status", "--porcelain", "--untracked-files=all", "--ignored"
+                    "status",
+                    "--porcelain",
+                    "--untracked-files=all",
+                    "--ignored",
+                    "--",
+                    *paths,
                 ):
                     keep_reason = "it contains local files or changes"
                 elif checkout_git(
@@ -589,7 +614,7 @@ def main(argv: list[str] | None = None) -> int:
                     "3/3  Python version", default_version, validate_version
                 )
 
-        author, email = git_identity(destination)
+        author, email = project_identity(destination)
         files = render_project(name, license_name, version, author, email)
         write_project(destination, files)
         print(terminal.style(f"\n  Created {name}", "1;32"))

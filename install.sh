@@ -9,11 +9,12 @@ pytyped_fail() {
 
 pytyped_usage() {
     cat <<'USAGE'
-Usage: install.sh [DIRECTORY | --yes]
+Usage: install.sh [--yes] [DIRECTORY]
 
 Clone pytyped and install the command in ~/.local/bin.
 With no arguments, ask where to clone (default: ~/.local/share/pytyped).
-Pass a directory to skip the question, or --yes to use the default.
+Ask for your full name and email, using your Git identity as defaults.
+Pass a directory to skip the location question, or --yes to accept all defaults.
 
 Environment overrides:
   XDG_DATA_HOME          Parent of the default pytyped checkout
@@ -34,19 +35,21 @@ pytyped_absolute_path() {
 pytyped_install() {
     pytyped_destination=${XDG_DATA_HOME:-$HOME/.local/share}/pytyped
     pytyped_prompt=true
-    case $# in
-        0) ;;
-        1)
-            case $1 in
-                -h|--help) pytyped_usage; return ;;
-                -y|--yes) pytyped_prompt=false ;;
-                -*) pytyped_fail "Unknown option: $1. Use install.sh -h for help." ;;
-                '') pytyped_fail 'The installation directory cannot be empty.' ;;
-                *) pytyped_destination=$1; pytyped_prompt=false ;;
-            esac
-            ;;
-        *) pytyped_fail 'Supply one installation directory, or use install.sh -h for help.' ;;
-    esac
+    pytyped_has_destination=false
+    while [ $# -gt 0 ]; do
+        case $1 in
+            -h|--help) pytyped_usage; return ;;
+            -y|--yes) pytyped_prompt=false ;;
+            -*) pytyped_fail "Unknown option: $1. Use install.sh -h for help." ;;
+            '') pytyped_fail 'The installation directory cannot be empty.' ;;
+            *)
+                [ "$pytyped_has_destination" = false ] || pytyped_fail 'Supply only one installation directory.'
+                pytyped_destination=$1
+                pytyped_has_destination=true
+                ;;
+        esac
+        shift
+    done
 
     command -v git >/dev/null 2>&1 || pytyped_fail 'Git is required. Install Git and run this installer again.'
     if ! command -v uv >/dev/null 2>&1; then
@@ -60,11 +63,13 @@ pytyped_install() {
     if [ "$pytyped_prompt" = true ]; then
         # stdin contains this script when invoked with wget/curl | sh.
         if ! ( : </dev/tty ) 2>/dev/null; then
-            pytyped_fail 'No terminal available. Pass a directory: sh install.sh /path/to/pytyped (or --yes).'
+            pytyped_fail 'No terminal available. Use sh install.sh --yes [DIRECTORY] to accept defaults.'
         fi
-        printf '  Install directory [%s]: ' "$pytyped_destination"
-        IFS= read -r pytyped_answer </dev/tty || pytyped_fail 'Installation cancelled.'
-        pytyped_destination=${pytyped_answer:-$pytyped_destination}
+        if [ "$pytyped_has_destination" = false ]; then
+            printf '  Install directory [%s]: ' "$pytyped_destination"
+            IFS= read -r pytyped_answer </dev/tty || pytyped_fail 'Installation cancelled.'
+            pytyped_destination=${pytyped_answer:-$pytyped_destination}
+        fi
     fi
 
     pytyped_destination=$(pytyped_absolute_path "$pytyped_destination")
@@ -100,6 +105,28 @@ pytyped_install() {
         pytyped_fail "A command already exists at $pytyped_command; it has been left untouched."
     fi
 
+    pytyped_config=$pytyped_destination/pytyped.conf
+    [ ! -L "$pytyped_config" ] || pytyped_fail "The configuration is a symbolic link: $pytyped_config"
+    if [ -e "$pytyped_config" ] && [ ! -f "$pytyped_config" ]; then
+        pytyped_fail "The configuration is not a file: $pytyped_config"
+    fi
+    # Read defaults from the caller's Git context before cloning or changing directories.
+    pytyped_name=$(git config --get user.name || true)
+    pytyped_email=$(git config --get user.email || true)
+    if [ -f "$pytyped_config" ]; then
+        git config --file "$pytyped_config" --list >/dev/null || pytyped_fail "Invalid configuration: $pytyped_config"
+        pytyped_name=$(git config --file "$pytyped_config" --get user.name || printf '%s' "$pytyped_name")
+        pytyped_email=$(git config --file "$pytyped_config" --get user.email || printf '%s' "$pytyped_email")
+    fi
+    if [ "$pytyped_prompt" = true ]; then
+        printf '  Full name [%s]: ' "$pytyped_name"
+        IFS= read -r pytyped_answer </dev/tty || pytyped_fail 'Installation cancelled.'
+        pytyped_name=${pytyped_answer:-$pytyped_name}
+        printf '  Email [%s]: ' "$pytyped_email"
+        IFS= read -r pytyped_answer </dev/tty || pytyped_fail 'Installation cancelled.'
+        pytyped_email=${pytyped_answer:-$pytyped_email}
+    fi
+
     pytyped_repository=${PYTYPED_REPO_URL:-https://github.com/neurapy/pyTypePd.git}
     pytyped_cloned=false
     if [ -e "$pytyped_destination/.git" ]; then
@@ -113,6 +140,9 @@ pytyped_install() {
     fi
     [ -x "$pytyped_launcher" ] && [ -f "$pytyped_destination/assets/generate.py" ] ||
         pytyped_fail "The checkout at $pytyped_destination does not contain the pytyped launcher and assets."
+
+    git config --file "$pytyped_config" user.name "$pytyped_name"
+    git config --file "$pytyped_config" user.email "$pytyped_email"
 
     # Record ownership inside the checkout so uninstall can preserve manual clones.
     if [ "$pytyped_cloned" = true ]; then
@@ -130,6 +160,7 @@ pytyped_install() {
     fi
 
     printf '\n  Installed %s\n' "$pytyped_command"
+    printf '  Configuration: %s\n' "$pytyped_config"
     case :${PATH:-}: in
         *:"$pytyped_bin":*) ;;
         *)

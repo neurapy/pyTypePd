@@ -34,6 +34,19 @@ class GeneratorTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.project = self.base / "Navier Stokes PINN"
+        # Keep the developer's personal pytyped.conf out of generated test projects.
+        self.checkout = self.base / "generator"
+        self.checkout.mkdir()
+        self.launcher = self.checkout / "pytyped.sh"
+        shutil.copy2(LAUNCHER, self.launcher)
+        shutil.copytree(
+            ROOT / "assets",
+            self.checkout / "assets",
+            ignore=shutil.ignore_patterns("__pycache__"),
+        )
+        root_patch = mock.patch.object(generate, "ROOT", self.checkout)
+        root_patch.start()
+        self.addCleanup(root_patch.stop)
         self.env = {**os.environ, "NO_COLOR": "1"}
         # Avoid depending on, or copying, the developer's Git identity.
         self.env.update({"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"})
@@ -43,10 +56,10 @@ class GeneratorTests(unittest.TestCase):
         *arguments: str,
         cwd: Path | None = None,
         answers: str = "",
-        launcher: Path = LAUNCHER,
+        launcher: Path | None = None,
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [str(launcher), *arguments],
+            [str(launcher or self.launcher), *arguments],
             cwd=cwd or self.base,
             env=self.env,
             input=answers,
@@ -74,7 +87,7 @@ class GeneratorTests(unittest.TestCase):
 
     def test_relative_launcher_and_dot_destination(self) -> None:
         self.project.mkdir()
-        relative_launcher = Path(os.path.relpath(LAUNCHER, self.project))
+        relative_launcher = Path(os.path.relpath(self.launcher, self.project))
         result = self.launch(
             ".",
             "--yes",
@@ -225,6 +238,13 @@ class GeneratorTests(unittest.TestCase):
             [{"name": 'A "quoted" \\ author', "email": "a@example.org"}],
         )
         self.assertIn('A "quoted" \\ author', files[Path("LICENSE")])
+
+    def test_invalid_identity_config_creates_no_project(self) -> None:
+        (self.checkout / "pytyped.conf").write_text("[broken configuration\n")
+        result = self.launch(str(self.project), "--yes", "--python", "3.14")
+        self.assertEqual(result.returncode, 1)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertFalse(self.project.exists())
 
     @unittest.skipUnless(
         shutil.which("taplo"), "Install Taplo to check TOML formatting"

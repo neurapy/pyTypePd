@@ -1,8 +1,11 @@
 # pytyped
 
-A small interactive generator for typed Python projects on macOS and Linux.
-Choose a name, a license, and a Python version such as 3.14. Get a runnable, buildable
+Build *real* projects in python easily.
+
+Choose a name, a license, and a Python version. Get a runnable, buildable
 project with Ruff, strict Pyright, pytest, pre-commit, and uv already configured.
+
+Friendly for Agents & Humans.
 
 ## Install
 
@@ -12,23 +15,41 @@ Run this from any directory:
 wget -qO- https://raw.githubusercontent.com/neurapy/pyTypePd/main/install.sh | sh
 ```
 
-Or use curl, available by default on macOS:
+Or:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/neurapy/pyTypePd/main/install.sh | sh
 ```
 
-The installer asks where to clone the Git repository. Press Enter for
-`~/.local/share/pytyped` (or `$XDG_DATA_HOME/pytyped` when set). It creates
-`~/.local/bin/pytyped`. If `~/.local/bin` is already on your PATH, the command is
-ready to use. Otherwise, the installer prints a PATH command you can run yourself.
-It does not edit shell startup files.
+The installer asks where to clone the Git repository, then asks for your full
+name and email. The directory defaults to `~/.local/share/pytyped` (or
+`$XDG_DATA_HOME/pytyped` when set). Your current Git `user.name` and `user.email`
+are the identity defaults; press Enter to accept them.
 
-The question reads from the terminal, so it also works when the script is piped
-into `sh`. For unattended installation, supply a directory or accept the default:
+Your answers are saved in `pytyped.conf` inside the checkout and used for the
+author metadata and license copyright in new projects. Edit that file to change
+your defaults; [pytyped.example.conf](pytyped.example.conf) shows the format:
+
+```ini
+[user]
+    name = "Your Full Name"
+    email = "you@example.com"
+```
+
+The personal file is ignored by Git and preserved during `pytyped --update`.
+Re-running the installer offers your saved identity as the defaults. Empty
+values are allowed when no Git identity is available.
+
+The installer creates `~/.local/bin/pytyped`. If `~/.local/bin` is already on
+your PATH, the command is ready to use. Otherwise, it prints a PATH command you
+can run yourself. It does not edit shell startup files or Git identity settings.
+
+Questions read from the terminal, so they also work when the script is piped
+into `sh`. Pass `--yes` to accept all defaults without prompting, with an optional
+installation directory:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/neurapy/pyTypePd/main/install.sh | sh -s -- "$HOME/tools/pytyped"
+curl -fsSL https://raw.githubusercontent.com/neurapy/pyTypePd/main/install.sh | sh -s -- --yes "$HOME/tools/pytyped"
 curl -fsSL https://raw.githubusercontent.com/neurapy/pyTypePd/main/install.sh | sh -s -- --yes
 ```
 
@@ -113,7 +134,8 @@ commits if an update cannot proceed. Generated projects are independent of the
 generator checkout and keep their existing files.
 
 `--uninstall` removes command links pointing to this copy of pytyped and deletes
-the checkout if it was created by the installer and has no local files, changes,
+the checkout, including `pytyped.conf`, if it was created by the installer and
+has no other local files, changes,
 commits, stashes, or linked worktrees. Older installations without an ownership
 marker are also recognized in the default install directory when their Git
 origin matches the pytyped repository. Other unmarked checkouts are kept, with
@@ -137,9 +159,10 @@ Installation is handled by `install.sh`; there is no `pytyped --install` option.
   the name to 64 characters or fewer. Python keywords and known conflicting module
   names are rejected.
 - **License:** defaults to MIT. Full license texts are bundled locally.
-  MIT/BSD copyright uses the destination's Git `user.name`, or `<project> contributors`
-  when unset. Git author name and email also populate package metadata when
-  available. Choosing `none` omits both the license file and license metadata.
+  MIT/BSD copyright uses your saved full name, or `<project> contributors` when
+  unset. The saved name and email also populate package metadata. Checkouts
+  without `pytyped.conf` fall back to the destination's Git identity.
+  Choosing `none` omits both the license file and license metadata.
 - **Python:** defaults to the newest published stable release from
   [python.org's release catalog](https://www.python.org/downloads/), excluding
   prereleases. Enter a major/minor version such as `3.14`, at least 3.10. The wizard
@@ -174,27 +197,3 @@ The destination must be empty, apart from an existing `.git` entry or `.DS_Store
 Files are never overwritten, and interrupted or failed writes are rolled back.
 Generation creates source and configuration files; dependency installation is
 the separate `make install` step.
-
-## Develop the generator
-
-The standalone installer is `install.sh`, the portable launcher is `pytyped.sh`,
-and the standard-library implementation is `assets/generate.py`.
-Edit the template in `assets/structure/app-name/` and the
-bundled texts in `assets/licenses/` to customize future projects.
-
-Run the generator tests, including Taplo validation of generated TOML:
-
-```sh
-uv run --no-project --python 3.11 --with taplo python -m unittest discover -s tests -v
-```
-
-The formatting checks cover Python 3.10 and 3.14, with and without license and
-Git author metadata. The other tests can also run with Python 3.11+ directly.
-
-To check the generated project as well, create a disposable project and run its
-`make install`, `make check`, and `make build` targets, then run its installed
-command with `uv run <project-name>`.
-The GitHub Actions workflow runs the tests and this workflow on Linux and macOS.
-Installation tests use temporary directories and local Git remotes, including
-piped installation with a controlling terminal, fast-forward updates, and
-uninstalling without deleting local work.
