@@ -367,8 +367,12 @@ def update_checkout(terminal: Terminal) -> None:
     terminal.note(f"Updating pytyped in {ROOT} from {upstream}...")
     result = subprocess.run(
         ["git", "-C", str(ROOT), "pull", "--ff-only", "--no-rebase", "--no-autostash"],
+        text=True,
+        capture_output=True,
         check=False,
     )
+    if result.stderr:
+        print(result.stderr.rstrip(), file=sys.stderr)
     if result.returncode:
         raise SetupError(
             "Update failed. Resolve the Git error above and run pytyped --update again."
@@ -379,6 +383,27 @@ def update_checkout(terminal: Terminal) -> None:
         else "pytyped updated."
     )
     print(terminal.style(f"\n  {message}\n", "32"))
+
+
+def is_installed_checkout() -> bool:
+    installed_root = checkout_git(
+        "config", "--local", "--get", "pytyped.installRoot", missing_ok=True
+    )
+    if installed_root:
+        return installed_root == str(ROOT)
+
+    # Older installers left no marker. Recognize only the dedicated default path
+    # and the expected repository; the caller still checks for local work.
+    data_home = Path(
+        os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share"
+    )
+    repository = (
+        os.environ.get("PYTYPED_REPO_URL") or "https://github.com/neurapy/pyTypePd.git"
+    )
+    return (
+        ROOT == (data_home / "pytyped").expanduser().resolve()
+        and checkout_git("remote", "get-url", "origin") == repository
+    )
 
 
 def uninstall_checkout(terminal: Terminal) -> None:
@@ -396,10 +421,7 @@ def uninstall_checkout(terminal: Terminal) -> None:
                 "config", "--local", "--get-all", "pytyped.command", missing_ok=True
             )
             commands.update(Path(path) for path in recorded.splitlines() if path)
-            installed_root = checkout_git(
-                "config", "--local", "--get", "pytyped.installRoot", missing_ok=True
-            )
-            if installed_root == str(ROOT) and (ROOT / ".git").is_dir():
+            if (ROOT / ".git").is_dir() and is_installed_checkout():
                 worktrees = checkout_git("worktree", "list", "--porcelain")
                 if (
                     sum(line.startswith("worktree ") for line in worktrees.splitlines())
@@ -419,6 +441,7 @@ def uninstall_checkout(terminal: Terminal) -> None:
     except SetupError as exc:
         keep_reason = f"could not verify it is safe to remove: {exc}"
 
+    removed_command = False
     for command in sorted(commands):
         # A command may have been replaced or redirected since installation.
         try:
@@ -427,14 +450,21 @@ def uninstall_checkout(terminal: Terminal) -> None:
             matches = False
         if matches:
             command.unlink()
+            removed_command = True
             terminal.note(f"Removed command: {command}")
 
     if keep_reason:
         terminal.note(f"Kept checkout: {ROOT} ({keep_reason}).")
+        message = (
+            "pytyped command removed; checkout kept."
+            if removed_command
+            else "Nothing removed; checkout kept."
+        )
     else:
         shutil.rmtree(ROOT)
         terminal.note(f"Removed checkout: {ROOT}")
-    print(terminal.style("\n  pytyped uninstalled.", "32"))
+        message = "pytyped uninstalled."
+    print(terminal.style(f"\n  {message}", "32"))
     print("\n  Reinstall with:\n")
     print(
         "    wget -qO- https://raw.githubusercontent.com/neurapy/pyTypePd/main/install.sh | sh\n"

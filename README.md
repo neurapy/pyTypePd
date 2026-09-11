@@ -111,13 +111,18 @@ generator checkout and keep their existing files.
 
 `--uninstall` removes command links pointing to this copy of pytyped and deletes
 the checkout if it was created by the installer and has no local files, changes,
-commits, stashes, or linked worktrees. Manually cloned and older unmarked
-checkouts are kept, with their location printed. Shell configuration and
-generated projects are left untouched. The command finishes by printing:
+commits, stashes, or linked worktrees. Older installations without an ownership
+marker are also recognized in the default install directory when their Git
+origin matches the pytyped repository. Other unmarked checkouts are kept, with
+their location printed. Shell configuration and generated projects are left
+untouched. The command finishes by printing:
 
 ```sh
 wget -qO- https://raw.githubusercontent.com/neurapy/pyTypePd/main/install.sh | sh
 ```
+
+If the command link has already been removed, you can still uninstall using the
+launcher directly, for example `~/.local/share/pytyped/pytyped.sh --uninstall`.
 
 Installation is handled by `install.sh`; there is no `pytyped --install` option.
 

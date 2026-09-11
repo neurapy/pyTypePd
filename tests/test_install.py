@@ -102,6 +102,13 @@ class InstallationTests(unittest.TestCase):
         self.assertTrue((checkout / ".git").is_dir())
         self.assertEqual((self.bin / "pytyped").resolve(), checkout / "pytyped.sh")
 
+    def install_legacy(self) -> None:
+        # Reproduce the older installer's clone and symlink without ownership metadata.
+        self.checkout.parent.mkdir(parents=True, exist_ok=True)
+        self.git(self.base, "clone", str(self.remote), str(self.checkout))
+        self.bin.mkdir(exist_ok=True)
+        (self.bin / "pytyped").symlink_to(self.checkout / "pytyped.sh")
+
     def maintenance(
         self,
         option: str,
@@ -303,7 +310,7 @@ class InstallationTests(unittest.TestCase):
         self.assertEqual(self.git(self.checkout, "rev-parse", "HEAD"), after)
         self.assertEqual(self.git(caller, "rev-parse", "HEAD"), before)
         self.assertTrue((self.checkout / "release-note.txt").is_file())
-        self.assertIn("Already up to date", self.update().stdout)
+        self.assertEqual(self.update().stdout.count("Already up to date"), 1)
 
     def test_update_preserves_tracked_and_untracked_changes(self) -> None:
         self.assert_installed(self.install("--yes"))
@@ -380,11 +387,11 @@ class InstallationTests(unittest.TestCase):
         self.assertFalse(checkout.exists())
         self.assertFalse((self.bin / "pytyped").is_symlink())
 
-    def test_uninstall_preserves_reused_and_older_checkouts(self) -> None:
-        for checkout in (self.seed, self.checkout):
+    def test_uninstall_preserves_reused_and_unmarked_custom_checkouts(self) -> None:
+        for checkout in (self.seed, self.base / "custom checkout"):
             with self.subTest(checkout=checkout):
                 self.assert_installed(self.install(str(checkout)), checkout)
-                if checkout == self.checkout:
+                if checkout != self.seed:
                     # Older installers did not record ownership or command paths.
                     self.git(
                         checkout, "config", "--local", "--remove-section", "pytyped"
@@ -393,8 +400,52 @@ class InstallationTests(unittest.TestCase):
                 result = self.maintenance("--uninstall")
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertIn("Kept checkout", result.stdout)
+                self.assertNotIn("pytyped uninstalled.", result.stdout)
                 self.assertEqual((checkout / "pytyped.sh").read_bytes(), original)
                 self.assertFalse((self.bin / "pytyped").is_symlink())
+
+    def test_uninstall_removes_legacy_default_installation_with_or_without_link(
+        self,
+    ) -> None:
+        for remove_link in (False, True):
+            with self.subTest(remove_link=remove_link):
+                self.install_legacy()
+                if remove_link:
+                    (self.bin / "pytyped").unlink()
+                result = self.maintenance(
+                    "--uninstall", launcher=self.checkout / "pytyped.sh"
+                )
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("pytyped uninstalled.", result.stdout)
+                self.assertFalse(self.checkout.exists())
+                self.assertFalse((self.bin / "pytyped").is_symlink())
+
+    def test_uninstall_preserves_local_work_in_legacy_installation(self) -> None:
+        self.install_legacy()
+        sentinel = self.checkout / "local-work.txt"
+        sentinel.write_text("Keep this work\n")
+        result = self.maintenance("--uninstall")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("local files or changes", result.stdout)
+        self.assertNotIn("pytyped uninstalled.", result.stdout)
+        self.assertEqual(sentinel.read_text(), "Keep this work\n")
+        self.assertFalse((self.bin / "pytyped").is_symlink())
+
+    def test_uninstall_preserves_other_origins_and_mismatched_ownership(self) -> None:
+        self.install_legacy()
+        self.git(self.checkout, "remote", "set-url", "origin", str(self.seed))
+        original = (self.checkout / "pytyped.sh").read_bytes()
+        result = self.maintenance("--uninstall")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Kept checkout", result.stdout)
+        self.assertEqual((self.checkout / "pytyped.sh").read_bytes(), original)
+
+        self.git(self.checkout, "remote", "set-url", "origin", str(self.remote))
+        self.git(self.checkout, "config", "pytyped.installRoot", str(self.seed))
+        result = self.maintenance("--uninstall", launcher=self.checkout / "pytyped.sh")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Nothing removed; checkout kept.", result.stdout)
+        self.assertEqual((self.checkout / "pytyped.sh").read_bytes(), original)
 
     def test_uninstall_preserves_local_files_including_ignored_files(self) -> None:
         self.assert_installed(self.install("--yes"))
