@@ -624,7 +624,7 @@ def main(argv: list[str] | None = None) -> int:
         print("  Next steps:\n")
         if destination != Path.cwd().resolve():
             print(f"    cd {shlex.quote(str(destination))}")
-        print("    git init\n    make install\n    make check\n")
+        print("    git init\n    make install\n    make check")
         print("    # make necessary initial changes")
         print('    git add . && git commit -m "Initial Commit"\n')
         return 0

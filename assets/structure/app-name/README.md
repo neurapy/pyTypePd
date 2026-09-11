@@ -10,7 +10,6 @@ Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and `make`
 git init
 make install
 make check
-
 # make necessary initial changes
 git add . && git commit -m "Initial Commit"
 ```

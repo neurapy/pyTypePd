@@ -109,7 +109,6 @@ Then, with `uv` and `make` installed:
 git init
 make install
 make check
-
 # make necessary initial changes
 git add . && git commit -m "Initial Commit"
 ```
