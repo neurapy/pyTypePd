@@ -233,10 +233,10 @@ def render_project(
     author_metadata = ""
     if author:
         author_metadata = (
-            f"\n[[project.authors]]\nname = {json.dumps(author, ensure_ascii=False)}\n"
+            f"\n\n[[project.authors]]\nname = {json.dumps(author, ensure_ascii=False)}"
         )
         if email:
-            author_metadata += f"email = {json.dumps(email, ensure_ascii=False)}\n"
+            author_metadata += f"\nemail = {json.dumps(email, ensure_ascii=False)}"
     values = {
         "project_name": name,
         "package_name": module,

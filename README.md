@@ -179,11 +179,14 @@ and the standard-library implementation is `assets/generate.py`.
 Edit the template in `assets/structure/app-name/` and the
 bundled texts in `assets/licenses/` to customize future projects.
 
-Run the generator tests (Python 3.11+):
+Run the generator tests, including Taplo validation of generated TOML:
 
 ```sh
-python3 -m unittest discover -s tests -v
+uv run --no-project --python 3.11 --with taplo python -m unittest discover -s tests -v
 ```
+
+The formatting checks cover Python 3.10 and 3.14, with and without license and
+Git author metadata. The other tests can also run with Python 3.11+ directly.
 
 To check the generated project as well, create a disposable project and run its
 `make install`, `make check`, `make run`, and `make build` targets.

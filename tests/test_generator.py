@@ -226,6 +226,40 @@ class GeneratorTests(unittest.TestCase):
         )
         self.assertIn('A "quoted" \\ author', files[Path("LICENSE")])
 
+    @unittest.skipUnless(
+        shutil.which("taplo"), "Install Taplo to check TOML formatting"
+    )
+    def test_generated_toml_passes_taplo_with_optional_metadata(self) -> None:
+        cases = [
+            (license_name, version, author, email)
+            for license_name in ("MIT", "none")
+            for version in ("3.10", "3.14")
+            for author, email in (
+                ("", ""),
+                ("Test Author", ""),
+                ('A "quoted" \\ author', "author@example.org"),
+            )
+        ]
+        for index, (license_name, version, author, email) in enumerate(cases):
+            with self.subTest(license=license_name, python=version, author=author):
+                project = self.base / f"formatting-{index}"
+                generate.write_project(
+                    project,
+                    generate.render_project(
+                        "fluid-solver", license_name, version, author, email
+                    ),
+                )
+                result = subprocess.run(
+                    ["taplo", "fmt", "--check"],
+                    cwd=project,
+                    env=self.env,
+                    text=True,
+                    capture_output=True,
+                    timeout=15,
+                    check=False,
+                )
+                self.assert_success(result)
+
     def test_help_lists_update_and_no_install_command(self) -> None:
         result = self.launch("-h")
         self.assert_success(result)
