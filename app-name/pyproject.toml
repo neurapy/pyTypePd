@@ -1,29 +1,29 @@
+[build-system]
+requires = ["uv_build>=0.11.7,<0.12.0"]
+build-backend = "uv_build"
+
 [project]
 name = "app-name"
-version = "0.1.0"
+version = "0.1"
 description = "Add your description here"
 license = "MIT"
 license-files = ["LICENSE"]
 readme = "README.md"
 authors = [{ name = "Gerrit Dolderer", email = "gerrit6.dolderer@gmail.com" }]
 requires-python = ">=3.14"
-dependencies = []
-keywords = ["boilerplate", "python", "pyright", "ruff", "typing", "uv"]
+keywords = []
 classifiers = [
-  "Development Status :: 3 - Alpha",
-  "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
-  "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.14",
-  "Programming Language :: Python :: 3 :: Only",
   "Typing :: Typed",
 ]
+dependencies = []
+
+[project.scripts]
+app-name = "app-name.__main__:main"
 
 [dependency-groups]
 dev = ["pre-commit", "pyright", "pytest>=9.0", "ruff", "taplo"]
-
-[tool.uv]
-package = false
 
 [tool.ruff]
 line-length = 100
@@ -104,6 +104,7 @@ strict = true
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
+known-first-party = ["package_name"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["INP001", "PLR2004", "S101"]
