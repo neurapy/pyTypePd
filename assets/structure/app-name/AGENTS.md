@@ -7,8 +7,5 @@
 - Before adding `# type: ignore`, `# pyright: ignore`, or disabling typing rules,
   check whether a maintained type-stub package or suitable `.pyi` stubs would
   solve the problem. Prefer proper types and stubs. If an ignore is unavoidable,
-  limit its scope and explain why.
-- Manage dependencies with `uv`. Add type stubs and development tools with
-  `uv add --dev`.
-- After code changes, run `make check`. Add or update focused tests when behavior
-  changes.
+  limit its scope.
+- Write tests only for cases, that are necessary to test. No redundant tests.
