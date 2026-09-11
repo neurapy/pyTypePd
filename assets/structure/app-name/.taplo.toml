@@ -1,0 +1,7 @@
+include = ["pyproject.toml", ".taplo.toml"]
+
+[formatting]
+allowed_blank_lines = 1
+array_auto_collapse = false
+column_width = 100
+indent_string = "  "

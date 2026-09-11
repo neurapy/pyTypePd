@@ -1,18 +1,18 @@
 """Python Projects, made fun again."""
 
-from utils.logger import configure_logging, get_logger
+from __package_name__.utils import logger
 
-LOGGER = get_logger("main.py")
+LOGGER = logger.get_logger(__name__)
 
 
 def greeting() -> str:
     """Return the default app greeting."""
-    return "Hello from app-name!"
+    return "Hello from __project_name__!"
 
 
 def main() -> None:
     """Run the application."""
-    configure_logging()
+    logger.configure_logging()
     LOGGER.info(greeting())
 
 

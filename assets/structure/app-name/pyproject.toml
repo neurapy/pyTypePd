@@ -1,34 +1,31 @@
 [build-system]
-requires = ["uv_build>=0.11.7,<0.12.0"]
+requires = ["uv_build>=0.12.13,<0.13.0"]
 build-backend = "uv_build"
 
 [project]
-name = "app-name"
-version = "0.1"
+name = "__project_name__"
+version = "0.1.0"
 description = "Add your description here"
-license = "MIT"
-license-files = ["LICENSE"]
+__license_metadata__
 readme = "README.md"
-authors = [{ name = "Gerrit Dolderer", email = "gerrit6.dolderer@gmail.com" }]
-requires-python = ">=3.14"
+requires-python = "==__python_version__.*"
 keywords = []
 classifiers = [
-  "License :: OSI Approved :: MIT License",
-  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: __python_minor__",
   "Typing :: Typed",
 ]
 dependencies = []
-
+__author_metadata__
 [project.scripts]
-app-name = "app-name.__main__:main"
+__project_name__ = "__package_name__.main:main"
 
 [dependency-groups]
-dev = ["pre-commit", "pyright", "pytest>=9.0", "ruff", "taplo"]
+dev = ["pre-commit", "pyright[nodejs]", "pytest>=9.0", "ruff", "taplo"]
 
 [tool.ruff]
 line-length = 100
 src = ["src", "tests"]
-target-version = "py314"
+target-version = "__ruff_target__"
 
 [tool.ruff.format]
 docstring-code-format = true
@@ -82,7 +79,7 @@ select = [
   "TC",    # flake8-type-checking: optimize type-only imports.
   "TD",    # flake8-todos: require actionable TODOs.
   "TRY",   # tryceratops: improve exception handling.
-  "UP",    # pyupgrade: modernize syntax for Python 3.14.
+  "UP",    # pyupgrade: modernize syntax for the selected Python version.
   "W",     # pycodestyle warnings: core style warnings.
   "YTT",   # flake8-2020: catch sys.version misuse.
 ]
@@ -104,7 +101,7 @@ strict = true
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
-known-first-party = ["package_name"]
+known-first-party = ["__package_name__"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["INP001", "PLR2004", "S101"]
@@ -119,7 +116,7 @@ exclude = [
   "dist",
 ]
 include = ["src", "tests"]
-pythonVersion = "3.14"
+pythonVersion = "__python_minor__"
 reportMissingTypeStubs = "error"
 typeCheckingMode = "strict"
 useLibraryCodeForTypes = true
@@ -132,12 +129,3 @@ minversion = "9.0"
 pythonpath = ["src"]
 strict = true
 testpaths = ["tests"]
-
-[tool.taplo]
-include = ["pyproject.toml"]
-
-[tool.taplo.formatting]
-allowed_blank_lines = 1
-array_auto_collapse = false
-column_width = 100
-indent_string = "    "
