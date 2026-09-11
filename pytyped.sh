@@ -4,14 +4,14 @@ set -eu
 
 pytyped_path=$0
 while [ -L "$pytyped_path" ]; do
-    pytyped_dir=$(CDPATH= cd -P "$(dirname "$pytyped_path")" && pwd)
+    pytyped_dir=$(CDPATH='' cd -P "$(dirname "$pytyped_path")" && pwd)
     pytyped_link=$(readlink "$pytyped_path")
     case $pytyped_link in
         /*) pytyped_path=$pytyped_link ;;
         *) pytyped_path=$pytyped_dir/$pytyped_link ;;
     esac
 done
-pytyped_dir=$(CDPATH= cd -P "$(dirname "$pytyped_path")" && pwd)
+pytyped_dir=$(CDPATH='' cd -P "$(dirname "$pytyped_path")" && pwd)
 
 if command -v python3 >/dev/null 2>&1 &&
     python3 -I -c 'import sys; sys.exit(sys.version_info < (3, 9))' 2>/dev/null; then

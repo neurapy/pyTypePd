@@ -3,11 +3,11 @@ requires = ["uv_build>=0.12.13,<0.13.0"]
 build-backend = "uv_build"
 
 [project]
-name = "__project_name__"
-version = "0.1.0"
-description = "Add your description here"
 __license_metadata__
-readme = "README.md"
+readme = "README.md"__author_metadata__
+[project.scripts]name = "__project_name__"
+version = "0.1.0"
+description = ""
 requires-python = "==__python_version__.*"
 keywords = []
 classifiers = [
@@ -15,8 +15,6 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = []
-__author_metadata__
-[project.scripts]
 __project_name__ = "__package_name__.main:main"
 
 [dependency-groups]

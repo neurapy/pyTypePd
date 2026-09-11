@@ -226,20 +226,13 @@ class GeneratorTests(unittest.TestCase):
         )
         self.assertIn('A "quoted" \\ author', files[Path("LICENSE")])
 
-    def test_installer_and_command_work_from_another_directory(self) -> None:
-        bin_dir = self.base / "local bin"
-        self.assert_success(self.launch("--install", str(bin_dir)))
-        self.assert_success(self.launch("--install", str(bin_dir)))
-        self.project.mkdir()
-        result = self.launch(
-            "--yes",
-            "--python",
-            "3.13",
-            launcher=bin_dir / "pytyped",
-            cwd=self.project,
-        )
+    def test_help_lists_update_and_no_install_command(self) -> None:
+        result = self.launch("-h")
         self.assert_success(result)
-        self.assertTrue((self.project / "pyproject.toml").is_file())
+        self.assertIn("--update", result.stdout)
+        self.assertNotIn("--install", result.stdout)
+        self.assertFalse(self.project.exists())
+        self.assertEqual(self.launch("--install").returncode, 2)
 
     def test_launcher_handles_spaces_and_relative_symlink_chains(self) -> None:
         checkout = self.base / "generator checkout"
@@ -261,18 +254,6 @@ class GeneratorTests(unittest.TestCase):
         )
         self.assert_success(result)
         self.assertTrue((self.project / "pyproject.toml").is_file())
-
-    def test_installer_does_not_replace_existing_command_or_broken_link(self) -> None:
-        command = self.base / "pytyped"
-        command.write_text("existing command")
-        result = self.launch("--install", str(self.base))
-        self.assertEqual(result.returncode, 1)
-        self.assertEqual(command.read_text(), "existing command")
-        command.unlink()
-        command.symlink_to("missing")
-        result = self.launch("--install", str(self.base))
-        self.assertEqual(result.returncode, 1)
-        self.assertEqual(command.readlink(), Path("missing"))
 
     def test_failed_write_rolls_back_only_created_files(self) -> None:
         git_dir = self.project / ".git"

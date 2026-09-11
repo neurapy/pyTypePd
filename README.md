@@ -4,6 +4,44 @@ A small interactive generator for typed Python projects on macOS and Linux.
 Choose a name, a license, and a Python version such as 3.14. Get a runnable, buildable
 project with Ruff, strict Pyright, pytest, pre-commit, and uv already configured.
 
+## Install
+
+Run this from any directory:
+
+```sh
+wget -qO- https://raw.githubusercontent.com/neurapy/pyTypePd/main/install.sh | sh
+```
+
+Or use curl, available by default on macOS:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/neurapy/pyTypePd/main/install.sh | sh
+```
+
+The installer asks where to clone the Git repository. Press Enter for
+`~/.local/share/pytyped` (or `$XDG_DATA_HOME/pytyped` when set). It creates
+`~/.local/bin/pytyped` and adds that directory to your shell configuration:
+`.zshrc` for zsh, or `.bashrc` and the login profile for bash. Existing settings
+are preserved. Open a new terminal afterward, or paste the printed PATH command
+into your current shell.
+
+The question reads from the terminal, so it also works when the script is piped
+into `sh`. For unattended installation, supply a directory or accept the default:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/neurapy/pyTypePd/main/install.sh | sh -s -- "$HOME/tools/pytyped"
+curl -fsSL https://raw.githubusercontent.com/neurapy/pyTypePd/main/install.sh | sh -s -- --yes
+```
+
+You can also run `sh install.sh` from a downloaded checkout. Installation needs
+Git and either Python 3.9+ or [uv](https://docs.astral.sh/uv/getting-started/installation/).
+Run `sh install.sh -h` for installer options, including overrides for the Git URL,
+command directory, and shell configuration file.
+
+Re-running the installer reuses an existing checkout of the same repository and
+avoids duplicate configuration entries. It can migrate a symlink created by the
+previous installer; unrelated commands and existing project files are preserved.
+
 ## Create a project
 
 Keep this repository anywhere on your machine. The launcher needs Python 3.9+
@@ -14,11 +52,12 @@ to run the generator.
 ```sh
 mkdir navier_stokes_pinn
 cd navier_stokes_pinn
-/path/to/pyTypePd/pytyped.sh .
+pytyped .
 ```
 
-Relative paths work too. Omit `.` to use your current directory, or pass a new
-directory and pytyped will create it, including missing parents.
+Omit `.` to use your current directory, or pass a new directory and pytyped will
+create it, including missing parents. Running `/path/to/pyTypePd/pytyped.sh .`
+directly from a checkout also works, including with a relative path.
 
 ```text
   pytyped
@@ -57,32 +96,20 @@ and installs the project and developer tools. To enable Git hooks, run `git init
 before `make install`. Commit `uv.lock` after the first install.
 Use a current uv release so it knows about the latest Python downloads.
 
-## Use it as a shell command
-
-Run once from this repository:
+## Help and updates
 
 ```sh
-./pytyped.sh --install
+pytyped -h
+pytyped --update
 ```
 
-This creates `~/.local/bin/pytyped`, pointing to this checkout. If needed, the
-installer prints the line to add to your shell configuration so the directory is
-on `PATH`. Keep the checkout in place; after moving it, remove the old symlink
-and run the installer again. A custom location works too:
+`-h` (or `--help`) lists generator options. `--update` pulls the tracked branch
+of pytyped's own Git checkout, regardless of your current directory. It requires
+a clean checkout and uses a fast-forward pull, preserving local changes and
+commits if an update cannot proceed. Generated projects are independent of the
+generator checkout and keep their existing files.
 
-```sh
-./pytyped.sh --install "$HOME/bin"
-```
-
-Now, from an empty project directory:
-
-```sh
-pytyped
-# or
-pytyped .
-```
-
-The installer leaves an existing, different command untouched.
+Installation is handled by `install.sh`; there is no `pytyped --install` option.
 
 ## Defaults and options
 
@@ -132,8 +159,9 @@ the separate `make install` step.
 
 ## Develop the generator
 
-The portable launcher is `pytyped.sh`; the standard-library implementation is
-`assets/generate.py`. Edit the template in `assets/structure/app-name/` and the
+The standalone installer is `install.sh`, the portable launcher is `pytyped.sh`,
+and the standard-library implementation is `assets/generate.py`.
+Edit the template in `assets/structure/app-name/` and the
 bundled texts in `assets/licenses/` to customize future projects.
 
 Run the generator tests (Python 3.11+):
@@ -145,3 +173,5 @@ python3 -m unittest discover -s tests -v
 To check the generated project as well, create a disposable project and run its
 `make install`, `make check`, `make run`, and `make build` targets.
 The GitHub Actions workflow runs the tests and this workflow on Linux and macOS.
+Installation tests use temporary directories and local Git remotes, including
+piped installation with a controlling terminal and fast-forward updates.

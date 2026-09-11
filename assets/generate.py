@@ -324,26 +324,55 @@ def write_project(destination: Path, files: dict[Path, str]) -> None:
         raise
 
 
-def install_command(directory: Path, terminal: Terminal) -> None:
-    directory = directory.expanduser().resolve()
-    command = directory / "pytyped"
-    launcher = ROOT / "pytyped.sh"
-    if command.is_symlink() and command.resolve() == launcher:
-        terminal.note(f"Already installed: {command}")
-    elif command.exists() or command.is_symlink():
+def update_checkout(terminal: Terminal) -> None:
+    """Update this checkout, independently of the caller's working directory."""
+    if not (ROOT / ".git").exists():
         raise SetupError(
-            f"A command already exists at {command}; it has been left untouched."
+            "This copy is not a Git checkout. Install pytyped with install.sh."
         )
-    else:
-        directory.mkdir(parents=True, exist_ok=True)
-        command.symlink_to(launcher)
-        print(terminal.style(f"\n  Installed {command}", "32"))
-    search_paths = {Path(path).expanduser().resolve() for path in os.get_exec_path()}
-    if directory not in search_paths:
-        print("\n  Add this to ~/.zshrc (zsh) or ~/.bashrc (bash):\n")
-        print(f'    export PATH={shlex.quote(str(directory))}:"$PATH"')
-        terminal.note("Then open a new terminal.")
-    print("\n  Run pytyped in your project directory to get started.\n")
+
+    def git(*arguments: str) -> str:
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(ROOT), *arguments],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        except FileNotFoundError as exc:
+            raise SetupError("Git is required to update pytyped.") from exc
+        if result.returncode:
+            raise SetupError(
+                result.stderr.strip() or "Could not read the pytyped Git checkout."
+            )
+        return result.stdout.strip()
+
+    if git("status", "--porcelain", "--untracked-files=all"):
+        raise SetupError(
+            f"The pytyped checkout has uncommitted changes: {ROOT}. "
+            "Commit or stash them before running --update."
+        )
+    if not git("branch", "--show-current"):
+        raise SetupError(
+            "The pytyped checkout has a detached HEAD. Check out a branch before updating."
+        )
+    upstream = git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
+    before = git("rev-parse", "HEAD")
+    terminal.note(f"Updating pytyped in {ROOT} from {upstream}...")
+    result = subprocess.run(
+        ["git", "-C", str(ROOT), "pull", "--ff-only", "--no-rebase", "--no-autostash"],
+        check=False,
+    )
+    if result.returncode:
+        raise SetupError(
+            "Update failed. Resolve the Git error above and run pytyped --update again."
+        )
+    message = (
+        "Already up to date."
+        if git("rev-parse", "HEAD") == before
+        else "pytyped updated."
+    )
+    print(terminal.style(f"\n  {message}\n", "32"))
 
 
 def argument_parser() -> argparse.ArgumentParser:
@@ -379,11 +408,9 @@ def argument_parser() -> argparse.ArgumentParser:
         help="skip release lookup; default to the running Python version",
     )
     parser.add_argument(
-        "--install",
-        nargs="?",
-        const=str(Path.home() / ".local" / "bin"),
-        metavar="BIN_DIR",
-        help="install the pytyped command (default: ~/.local/bin)",
+        "--update",
+        action="store_true",
+        help="update the pytyped Git checkout with a fast-forward pull",
     )
     return parser
 
@@ -393,20 +420,18 @@ def main(argv: list[str] | None = None) -> int:
     options = parser.parse_args(argv)
     terminal = Terminal()
     try:
-        if options.install is not None:
+        if options.update:
             if options.destination != "." or any(
                 (
-                    options.name,
-                    options.license_name,
-                    options.python,
+                    options.name is not None,
+                    options.license_name is not None,
+                    options.python is not None,
                     options.yes,
                     options.offline,
                 )
             ):
-                raise SetupError(
-                    "Use --install on its own, optionally followed by a bin directory."
-                )
-            install_command(Path(options.install), terminal)
+                raise SetupError("Use --update on its own.")
+            update_checkout(terminal)
             return 0
 
         destination = Path(options.destination).expanduser().resolve()
@@ -471,7 +496,12 @@ def main(argv: list[str] | None = None) -> int:
         print("    make install\n    make check\n    make run\n")
         return 0
     except (EOFError, KeyboardInterrupt):
-        print("\n  Cancelled. No project was created.", file=sys.stderr)
+        message = (
+            "Update cancelled."
+            if options.update
+            else "Cancelled. No project was created."
+        )
+        print(f"\n  {message}", file=sys.stderr)
         return 130
     except (SetupError, ValueError, OSError) as exc:
         print(f"\n  pytyped: {exc}", file=sys.stderr)
