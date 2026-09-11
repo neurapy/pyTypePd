@@ -85,14 +85,17 @@ project files are written. Color is used in terminals and respects `NO_COLOR`.
 Then, with `uv` and `make` installed:
 
 ```sh
+git init
 make install
 make check
-make run
+
+# make necessary initial changes
+git add . && git commit -m "Initial Commit"
 ```
 
 `make install` downloads the selected Python version if necessary, creates `.venv`,
-and installs the project and developer tools. To enable Git hooks, run `git init`
-before `make install`. Commit `uv.lock` after the first install.
+and installs the project, developer tools, and Git hooks. The initial commit
+includes `uv.lock`. Run the installed app with `uv run navier-stokes-pinn`.
 Use a current uv release so it knows about the latest Python downloads.
 
 ## Help, updates, and uninstalling
@@ -189,7 +192,8 @@ The formatting checks cover Python 3.10 and 3.14, with and without license and
 Git author metadata. The other tests can also run with Python 3.11+ directly.
 
 To check the generated project as well, create a disposable project and run its
-`make install`, `make check`, `make run`, and `make build` targets.
+`make install`, `make check`, and `make build` targets, then run its installed
+command with `uv run <project-name>`.
 The GitHub Actions workflow runs the tests and this workflow on Linux and macOS.
 Installation tests use temporary directories and local Git remotes, including
 piped installation with a controlling terminal, fast-forward updates, and

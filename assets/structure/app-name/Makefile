@@ -3,14 +3,12 @@
 UV ?= uv
 TAPLO ?= RUST_LOG=error $(UV) run taplo
 
-.PHONY: help install sync run format lint typecheck test check build clean
+.PHONY: help install format lint typecheck test check build clean
 
 help:
 	@printf '%s\n' \
 		'Available targets:' \
 		'  install    Install dependencies and hooks if Git is initialized' \
-		'  sync       Install project and developer dependencies' \
-		'  run        Run the app' \
 		'  format     Format Python and TOML files' \
 		'  lint       Lint Python files with Ruff' \
 		'  typecheck  Run Pyright in strict mode' \
@@ -19,18 +17,13 @@ help:
 		'  build      Build a wheel and source distribution' \
 		'  clean      Remove local build and tool artifacts'
 
-install: sync
+install:
+	$(UV) sync --all-groups
 	@if [ -e .git ]; then \
 		$(UV) run pre-commit install; \
 	else \
 		printf '%s\n' 'Dependencies ready. To enable commit hooks: git init && make install'; \
 	fi
-
-sync:
-	$(UV) sync --all-groups
-
-run:
-	$(UV) run __project_name__
 
 format:
 	$(UV) run ruff format .

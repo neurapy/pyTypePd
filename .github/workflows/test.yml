@@ -26,8 +26,8 @@ jobs:
           project_dir="$RUNNER_TEMP/typed example"
           ./pytyped.sh "$project_dir" --name typed-example --yes --python 3.14
           cd "$project_dir"
-          make install check run build
           git init
-          make install
+          make install check build
+          uv run typed-example
           git add .
           uv run pre-commit run --all-files
